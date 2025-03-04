@@ -9,15 +9,15 @@ class ExampleDataFields (DataFields):
     pass
 
 class ExampleDataManager (DataManager):
-    _DEFAULT_VALUES = {
-        ExampleDataFields.STRING: "example",
-        ExampleDataFields.NUMBER: 1234,
-        ExampleDataFields.BOOL: True
-    }
-
     def __init__(self):
         super().__init__(os.path.join(os.path.dirname(__file__), "data")) # Forced the datapath here.
 
+    def getDefaultValues(self) -> dict:
+        return {
+            ExampleDataFields.STRING: "example",
+            ExampleDataFields.NUMBER: 1234,
+            ExampleDataFields.BOOL: True
+        }
 
 # Code from here point on.
 
@@ -26,8 +26,8 @@ breakpoint = lambda: input("\nPress Enter to continue. \n")
 manager = ExampleDataManager()
 
 identifier = input("Enter identifier: ")
-if not manager.databaseExists(identifier):
-    manager.createDatabase(identifier)
+if not manager.datafileExists(identifier):
+    manager.createDatafile(identifier)
 
 breakpoint()
 # Get the data for "user123"
@@ -55,13 +55,13 @@ except DataManagerErrors.DataKeyNotExists as e:
 breakpoint()
 # Attempt to create a database for an existing identifier (will raise error)
 try:
-    manager.createDatabase(identifier)
+    manager.createDatafile(identifier)
 except DataManagerErrors.PathExists as e:
     print("repeatID Error:", e)
 
 breakpoint()
 # Attempt to delete the created database
-manager.deleteDatabase(identifier)
+manager.deleteDatafile(identifier)
 
 # Attempt to access the deleted database
 try:
@@ -80,3 +80,4 @@ while True:
         break
     except Exception as e:
         print("deleteall Error:", e)
+        break

@@ -1,22 +1,23 @@
 import os
 import json
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from enum import Enum
 
 from DataManager import *
 
-class DataFields:
+class DataFields (ABC):
     """
     This class stores the constants for the specific fields of the data you are saving (e.g. user_id, item_id).
     Extend this class to define the data fields.
     """
 
-    IDENTIFIER = "identifier"
+    IDENTIFIER = "identifier" # Identifier must exist as a data field.
+    pass
 
 class DataManagerErrors:
     """
-        This class stores the error codes for the DataManager class.
+        This class stores the error codes for the DataManager class. 
     """
 
     class PathExists(Exception):
@@ -43,7 +44,6 @@ class DataManagerErrors:
         def __init__(self, key: str, msg: str = None):
             super().__init__(f"Data key {key} does not exist" + (f": {msg}" if msg else ""))
 
-
 class DataManager (ABC):
     """
         This class is the abstract class for the DataManager. It is responsible for handling the data storage and retrieval.
@@ -64,140 +64,146 @@ class DataManager (ABC):
                 return self.getData(identifier, DataFields.PASSWORD)
         ```
         (Note: Please remember to add all constants to an extension of the DataFields class)
+
+        Definitions:
+            Please take a look at the following definitions to adhere to existing naming conventions.
+            - Datapath (DP): The folder in which a database is running (for example, `...\\root\\data\\`)
+            - Database (DB): Databases are based on their assigned DP. They are responsible for the data manipulation within this path.
+            - Datafile/document (DD): Databases store datafiles. The datafiles are (JSON) documents that store all of the data attached to an identifier.
+            - DataField (DF): An enum class storing all of the data a Data Document will store through consts. Data can only be accessed through there consts.
     """
 
-    DATAPATH = None
-
-    _DEFAULT_VALUES = {}
-    """ Stored as `key: value`
-     
-        These values correspond to the constants in DataFields
-     """
+    _DATAPATH = None
 
     def __init__(self, datapath: str):
         """
             Datapath should be a string that is a valid path to a directory. Use os.path.join to make it platform independent.
         """
-        if isinstance(datapath, str):
-            if not os.path.exists(datapath):
-                os.makedirs(datapath)
-            self.DATAPATH = datapath
-        else:
+
+        if not isinstance(datapath, str): # Throw error if datapath type is incorrect
             raise ValueError("datapath needs to be a string")
     
+        if not os.path.exists(datapath):
+            os.makedirs(datapath) # Make the directory if it does not exist. This will also throw an error if a datapath style is incorrect.
+        
+        self._DATAPATH = datapath
+
     @property
     def datapath(self):
-        if isinstance(self.DATAPATH, str):
-            return self.DATAPATH
+        if isinstance(self._DATAPATH, str):
+            return self._DATAPATH
         else:
-            raise ValueError("Tried to retrieve null datapath")
-        
-    @property
+            raise ValueError(f"Tried to retrieve {type(self._DATAPATH)} datapath")
+    
     def getDefaultValues(self) -> dict:
-        return self._DEFAULT_VALUES
+        """ Override this function to define the default (required) values of every datafile in a database. 
+        
+        Stored as `key: value`. These values correspond to the constants in DataFields. All DataFiles MUST have these values. DDs lacking any of the set keys will be repaired and set to the default state set here.
+
+        Note that `DataFields.Identifier` already exists as a defalt value.
+        """
+        return {} # Default an empty dictionary here in the base class. This function is intended to be overwritten.
         
     def getFormattedFilename(self, identifier: str) -> str:
-        """
-            Overwrite this function to change the format of file creation.
+        """ Override this function to change the format of file creation.
 
             This MUST return a string that is a valid file path (with the .json extension)
 
-            WARNING: Overriding how files look may require you to override several other functions (depending on how your are formatting your names. Take a look at Example.py.). You are much better of using directories to sort data rather than formatting.
+            WARNING: Overriding how files look may require you to override several other functions (depending on how your are formatting your names. Take a look at Example.py.). You are much better of using databases within databases to sort data rather than formatting.
         """
         return os.path.join(self.datapath, f"{identifier}.json")
     
-    def databaseExists(self, identifier: str) -> bool:
-        """
-        This function should check if the database exists.
-        """
-        path = self.getFormattedFilename(identifier)
+    def datafileExists(self, identifier: str) -> bool:
+        """ This function returns if a datafile to an identifier exists. """
+        path = self.getFormattedFilename(identifier) # Format filename for uniformity.
         return os.path.exists(path)
 
     def getData(self, identifier: str, key: DataFields = None):
         """
-        This function should fetch the data from the DB and return it.
+        This function should fetch the data from a datafile and return it.
 
         Returns `dict` unless a key is specified, in which case it returns the value of the key.
         """
 
-        path = self.getFormattedFilename(identifier)
+        path = self.getFormattedFilename(identifier) # Get formatted filepath
 
-        if not self.databaseExists(identifier):
-            raise DataManagerErrors.PathNotExists()
+        if not self.datafileExists(identifier):
+            raise DataManagerErrors.PathNotExists() # Raise targetted error
         
-        with open(path, 'r') as file:
+        with open(path, 'r') as file: # Read contents of a file and save it to the data variable
             data = json.load(file)
 
-        # Validates all default keys exist.
-        data |= {key: value for key, value in self.getDefaultValues.items() if key not in data} # Add any missing default values from `self.getDefaultValues()` to `data`
+        defaults = self.getDefaultValues() or {} # Ensure getDefaultValues() returns a dictionary (use empty dictionary if None)
+
+        data.update({key: value for key, value in defaults.items() if key not in data}) # Merge missing default values from getDefaultValues into the data
+
         data.setdefault(DataFields.IDENTIFIER, identifier) # Ensure `DataFields.IDENTIFIER` exists in `data`, setting it to `identifier` if missing
 
-        path = self.getFormattedFilename(identifier)
-        with open(path, 'w') as file:
+        with open(path, 'w') as file: # Write the default values for missing keys
             json.dump(data, file, indent=4)
 
         if key is not None:
-            if key not in data:
-                raise DataManagerErrors.DataKeyNotExists(key)
-            return data[key]
-        return data
+            if key not in data: # If the key does not exist return a targetted error
+                raise DataManagerErrors.DataKeyNotExists(str(key))
+            return data[key] # If a key was specified, return the value.
+        return data # If no key was specified, return the data as a dictionary.
 
     def setData(self, identifier: str, field: DataFields, newVal) -> None:
-        data = self.getData(identifier)
-        data[str(field)] = newVal
+        """ Sets a value to a field in a datafile. Assumes the newVal is a valid value for the field."""
+        data = self.getData(identifier) # Get a dictionary of the data
+        data[str(field)] = newVal # Set (or create) a key to the new value specified
 
         path = self.getFormattedFilename(identifier)
         try:
-            with open(path, 'w') as file:
+            with open(path, 'w') as file: # Override the new copy of the data with the new information on the old one.
                 json.dump(data, file, indent=4)
-        except Exception:
-            raise DataManagerErrors.PathNotExists()
+        except Exception as e: # Raise a targetted PathNotExists error if anything goes wrong.
+            raise DataManagerErrors.PathNotExists(str(e))
 
-    def createDatabase(self, identifier: str):
-        """
-            This function should create the datatype in the DB.
-        """
-        path = self.getFormattedFilename(identifier)
-        if self.databaseExists(identifier):
+    def createDatafile(self, identifier: str):
+        if self.datafileExists(identifier):  # Check if the datafile already exists
             raise DataManagerErrors.PathExists()
         else:
+            path = self.getFormattedFilename(identifier)  # Get the formatted filename
+            data = {str(DataFields.IDENTIFIER): identifier}
+            data.update(self.getDefaultValues())  # Add the default values to the data when creating the datafile.
             with open(path, 'w') as file:
-                json.dump({str(DataFields.IDENTIFIER): identifier}, file, indent=4)
+                json.dump(data, file, indent=4)  # Write the combined data into the file.
 
-    def deleteDatabase(self, identifier: str):
+
+    def deleteDatafile(self, identifier: str):
         """
-            This function should delete the datatype from the DB.
+            Delete a datafile from the database.
         """
-        path = self.getFormattedFilename(identifier)
+        path = self.getFormattedFilename(identifier) # Get path
         
-        if not self.databaseExists(identifier):
+        if not self.datafileExists(identifier): # Ensure the path exists before deleting it
             raise DataManagerErrors.PathNotExists()
         
         try:
-            os.remove(path)
-        except Exception as e:
+            os.remove(path) # Delete the path
+        except Exception as e: # Raise any errors that may arrise.
             raise Exception(f"An error occurred while deleting the database: {str(e)}")
         
     def DANGER_DELETEALL(self):
         """
-            Deletes entire database.
+            Deletes the entire database.
 
             WARNING: THIS DELETES THE ENTIRE DATAPATH FOLDER! Please ensure only data is stored here!
         """
-        if not os.path.exists(self.datapath):
+
+        if not os.path.exists(self.datapath): # Ensures the datapath exists before deleting it.
             raise DataManagerErrors.PathNotExists()
 
         try:
             # Remove all files in the datapath directory
-            for filename in os.listdir(self.datapath):
-                file_path = os.path.join(self.datapath, filename)
-                if os.path.isfile(file_path):
-                    os.remove(file_path)
-                elif os.path.isdir(file_path):
-                    # If it's a directory, remove it recursively
-                    os.rmdir(file_path)
+            for filename in os.listdir(self.datapath): # Cycle through the contents of a directory
+                file_path = os.path.join(self.datapath, filename) # Get the filepath of an item of the contents.
+                if os.path.isfile(file_path): # Check if item is a file
+                    os.remove(file_path) # If it is a file, remove the file.
+                elif os.path.isdir(file_path): # Check if item is a directory
+                    os.rmdir(file_path) # If it's a directory, remove it recursively
 
-            # Optionally, remove the datapath itself if it's empty
-            os.rmdir(self.datapath)
-        except Exception as e:
+            os.rmdir(self.datapath) # Delete the datapath itself after it's all over.
+        except Exception as e: # Raise any errors that my arrise.
             raise Exception(f"An error occurred while deleting the entire database: {str(e)}")
