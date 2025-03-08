@@ -10,7 +10,7 @@ class ExampleDataFields (DataFields):
 
 class ExampleDataManager (DataManager):
     def __init__(self):
-        super().__init__(os.path.join(os.path.dirname(__file__), "data")) # Forced the datapath here.
+        super().__init__(os.path.join(os.path.dirname(__file__), "data"), self.DatabaseType.DICT) # Forced the datapath here.
 
     def getDefaultValues(self) -> dict:
         return {

@@ -2,6 +2,7 @@ import os
 import json
 
 from abc import ABC, abstractmethod
+from enum import Enum
 
 class DataFields (ABC):
     """
@@ -41,6 +42,15 @@ class DataManagerErrors:
         def __init__(self, key: str, msg: str = None):
             super().__init__(f"Data key {key} does not exist" + (f": {msg}" if msg else ""))
 
+    class IncorrectDatabaseType(Exception):
+        """
+            This exception is raised when the program tries to use a function not of a certain database type.
+        """
+
+        def _init_(self, type = None, msg: str = None):
+            super().__init__(f"Tried to attempt a type-specific function as a {str(type)}" + (f": {msg}" if msg else ""))
+
+
 class DataManager (ABC):
     """
         This class is the abstract class for the DataManager. It is responsible for handling the data storage and retrieval.
@@ -71,8 +81,15 @@ class DataManager (ABC):
     """
 
     _DATAPATH = None
+    dbtype = None
 
-    def __init__(self, datapath: str):
+    class DatabaseType (Enum):
+        """ Defines how you want data to be stored. """
+        DICT = 'dict'
+        LIST = 'list'
+        pass
+
+    def __init__(self, datapath: str, type: DatabaseType):
         """
             Datapath should be a string that is a valid path to a directory. Use os.path.join to make it platform independent.
         """
@@ -84,6 +101,7 @@ class DataManager (ABC):
             os.makedirs(datapath) # Make the directory if it does not exist. This will also throw an error if a datapath style is incorrect.
         
         self._DATAPATH = datapath
+        self.dbtype = type
 
     @property
     def datapath(self):
@@ -98,6 +116,8 @@ class DataManager (ABC):
         Stored as `key: value`. These values correspond to the constants in DataFields. All DataFiles MUST have these values. DDs lacking any of the set keys will be repaired and set to the default state set here.
 
         Note that `DataFields.Identifier` already exists as a defalt value.
+
+        Only works with database type dict.
         """
         return {} # Default an empty dictionary here in the base class. This function is intended to be overwritten.
         
@@ -130,27 +150,51 @@ class DataManager (ABC):
         with open(path, 'r') as file: # Read contents of a file and save it to the data variable
             data = json.load(file)
 
-        defaults = self.getDefaultValues() or {} # Ensure getDefaultValues() returns a dictionary (use empty dictionary if None)
+        if self.dbtype == DataManager.DatabaseType.DICT: # Only overrides default values and uses keys for databases of type DICT
+            defaults = self.getDefaultValues() or {} # Ensure getDefaultValues() returns a dictionary (use empty dictionary if None)
 
-        data.update({key: value for key, value in defaults.items() if key not in data}) # Merge missing default values from getDefaultValues into the data
+            data.update({key: value for key, value in defaults.items() if key not in data}) # Merge missing default values from getDefaultValues into the data
 
-        data.setdefault(DataFields.IDENTIFIER, identifier) # Ensure `DataFields.IDENTIFIER` exists in `data`, setting it to `identifier` if missing
+            data.setdefault(DataFields.IDENTIFIER, identifier) # Ensure `DataFields.IDENTIFIER` exists in `data`, setting it to `identifier` if missing
 
-        with open(path, 'w') as file: # Write the default values for missing keys
-            json.dump(data, file, indent=4)
+            with open(path, 'w') as file: # Write the default values for missing keys
+                json.dump(data, file, indent=4)
 
-        if key is not None:
-            if key not in data: # If the key does not exist return a targetted error
-                raise DataManagerErrors.DataKeyNotExists(str(key))
-            return data[key] # If a key was specified, return the value.
-        return data # If no key was specified, return the data as a dictionary.
+            if key is not None:
+                if key not in data: # If the key does not exist return a targetted error
+                    raise DataManagerErrors.DataKeyNotExists(str(key))
+                return data[key] # If a key was specified, return the value.
+        return data # If no key was specified (or datatype is a list), return the complete data.
 
     def setData(self, identifier: str, field: DataFields, newVal) -> None:
-        """ Sets a value to a field in a datafile. Assumes the newVal is a valid value for the field."""
+        """ Sets a value to a field in a datafile. Assumes the newVal is a valid value for the field. 
+        
+        SPECIFIC TO `DatabaseType.DICT`
+        """
+        if not self.dbtype == self.DatabaseType.DICT: # throw error if the database type is not a dictionary.
+            raise DataManagerErrors.IncorrectDatabaseType(self.dbtype)
+
         data = self.getData(identifier) # Get a dictionary of the data
         data[str(field)] = newVal # Set (or create) a key to the new value specified
 
-        path = self.getFormattedFilename(identifier)
+        path = self.getFormattedFilename(identifier) # Get the path
+        try:
+            with open(path, 'w') as file: # Override the new copy of the data with the new information on the old one.
+                json.dump(data, file, indent=4)
+        except Exception as e: # Raise a targetted PathNotExists error if anything goes wrong.
+            raise DataManagerErrors.PathNotExists(str(e))
+    def addItem(self, identifier: str, value) -> None:
+        """ Adds an item to the list. Does not factor if item already exists. 
+        
+        SPECIFIC TO `DatabaseType.LIST`
+        """
+        if not self.dbtype == self.DatabaseType.LIST: # throw error if the database type is not a dictionary.
+            raise DataManagerErrors.IncorrectDatabaseType(self.dbtype)
+
+        data = self.getData(identifier) # Get a copy of the data
+        data.extend([value]) # Add value to the list.
+
+        path = self.getFormattedFilename(identifier) # Get the path
         try:
             with open(path, 'w') as file: # Override the new copy of the data with the new information on the old one.
                 json.dump(data, file, indent=4)
@@ -162,8 +206,14 @@ class DataManager (ABC):
             raise DataManagerErrors.PathExists()
         else:
             path = self.getFormattedFilename(identifier)  # Get the formatted filename
-            data = {str(DataFields.IDENTIFIER): identifier}
-            data.update(self.getDefaultValues())  # Add the default values to the data when creating the datafile.
+            if self.dbtype == self.DatabaseType.DICT:
+                data = {str(DataFields.IDENTIFIER): identifier} # Add identifier to the data
+                data.update(self.getDefaultValues())  # Add the default values to the data when creating the datafile.
+            elif self.dbtype == self.DatabaseType.LIST:
+                data = [] # Initialise empty list.
+            else:
+                raise ValueError(f"Database has an incorrect or invalid type: {str(self.dbtype)}")
+            
             with open(path, 'w') as file:
                 json.dump(data, file, indent=4)  # Write the combined data into the file.
 
