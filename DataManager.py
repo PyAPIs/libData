@@ -8,6 +8,8 @@ class DataFields (ABC):
     """
     This class stores the constants for the specific fields of the data you are saving (e.g. user_id, item_id).
     Extend this class to define the data fields.
+
+    Note: Specific to dict-type databases
     """
 
     IDENTIFIER = "identifier" # Identifier must exist as a data field.
@@ -85,8 +87,8 @@ class DataManager (ABC):
 
     class DatabaseType (Enum):
         """ Defines how you want data to be stored. """
-        DICT = 'dict'
-        LIST = 'list'
+        DICT = 0
+        LIST = 1
         pass
 
     def __init__(self, datapath: str, type: DatabaseType):
