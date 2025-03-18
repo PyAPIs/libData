@@ -70,7 +70,7 @@ class DataManager (ABC):
         Example:
         ```python
             def getPassword(self, identifier: str) -> str:
-                return super(DataManager, self).getData(identifier, DataFields.PASSWORD)
+                return self.getData(identifier, DataFields.PASSWORD)
         ```
         (Note: Please remember to add all constants to an extension of the DataFields class)
 
@@ -102,15 +102,15 @@ class DataManager (ABC):
         if not os.path.exists(datapath):
             os.makedirs(datapath) # Make the directory if it does not exist. This will also throw an error if a datapath style is incorrect.
         
-        super(DataManager, self)._DATAPATH = datapath
-        super(DataManager, self).dbtype = type
+        self._DATAPATH = datapath
+        self.dbtype = type
 
     @property
     def datapath(self):
-        if isinstance(super(DataManager, self)._DATAPATH, str):
-            return super(DataManager, self)._DATAPATH
+        if isinstance(self._DATAPATH, str):
+            return self._DATAPATH
         else:
-            raise ValueError(f"Tried to retrieve {type(super(DataManager, self)._DATAPATH)} datapath")
+            raise ValueError(f"Tried to retrieve {type(self._DATAPATH)} datapath")
     
     def getDefaultValues(self) -> dict:
         """ Override this function to define the default (required) values of every datafile in a database. 
@@ -130,11 +130,11 @@ class DataManager (ABC):
 
             WARNING: Overriding how files look may require you to override several other functions (depending on how your are formatting your names. Take a look at Example.py.). You are much better of using databases within databases to sort data rather than formatting.
         """
-        return os.path.join(super(DataManager, self).datapath, f"{identifier}.json")
+        return os.path.join(self.datapath, f"{identifier}.json")
     
     def datafileExists(self, identifier: str) -> bool:
         """ This function returns if a datafile to an identifier exists. """
-        path = super(DataManager, self).getFormattedFilename(identifier) # Format filename for uniformity.
+        path = self.getFormattedFilename(identifier) # Format filename for uniformity.
         return os.path.exists(path)
 
     def getData(self, identifier: str, key: DataFields = None):
@@ -144,16 +144,16 @@ class DataManager (ABC):
         Returns `dict` unless a key is specified, in which case it returns the value of the key.
         """
 
-        path = super(DataManager, self).getFormattedFilename(identifier) # Get formatted filepath
+        path = self.getFormattedFilename(identifier) # Get formatted filepath
 
-        if not super(DataManager, self).datafileExists(identifier):
+        if not self.datafileExists(identifier):
             raise DataManagerErrors.PathNotExists() # Raise targetted error
         
         with open(path, 'r') as file: # Read contents of a file and save it to the data variable
             data = json.load(file)
 
-        if super(DataManager, self).dbtype == DataManager.DatabaseType.DICT: # Only overrides default values and uses keys for databases of type DICT
-            defaults = super(DataManager, self).getDefaultValues() or {} # Ensure getDefaultValues() returns a dictionary (use empty dictionary if None)
+        if self.dbtype == DataManager.DatabaseType.DICT: # Only overrides default values and uses keys for databases of type DICT
+            defaults = self.getDefaultValues() or {} # Ensure getDefaultValues() returns a dictionary (use empty dictionary if None)
 
             data.update({key: value for key, value in defaults.items() if key not in data}) # Merge missing default values from getDefaultValues into the data
 
@@ -173,13 +173,13 @@ class DataManager (ABC):
         
         SPECIFIC TO `DatabaseType.DICT`
         """
-        if not super(DataManager, self).dbtype == super(DataManager, self).DatabaseType.DICT: # throw error if the database type is not a dictionary.
-            raise DataManagerErrors.IncorrectDatabaseType(super(DataManager, self).dbtype)
+        if not self.dbtype == self.DatabaseType.DICT: # throw error if the database type is not a dictionary.
+            raise DataManagerErrors.IncorrectDatabaseType(self.dbtype)
 
-        data = super(DataManager, self).getData(identifier) # Get a dictionary of the data
+        data = self.getData(identifier) # Get a dictionary of the data
         data[str(field)] = newVal # Set (or create) a key to the new value specified
 
-        path = super(DataManager, self).getFormattedFilename(identifier) # Get the path
+        path = self.getFormattedFilename(identifier) # Get the path
         try:
             with open(path, 'w') as file: # Override the new copy of the data with the new information on the old one.
                 json.dump(data, file, indent=4)
@@ -190,13 +190,13 @@ class DataManager (ABC):
         
         SPECIFIC TO `DatabaseType.LIST`
         """
-        if not super(DataManager, self).dbtype == super(DataManager, self).DatabaseType.LIST: # throw error if the database type is not a dictionary.
-            raise DataManagerErrors.IncorrectDatabaseType(super(DataManager, self).dbtype)
+        if not self.dbtype == self.DatabaseType.LIST: # throw error if the database type is not a dictionary.
+            raise DataManagerErrors.IncorrectDatabaseType(self.dbtype)
 
-        data = super(DataManager, self).getData(identifier) # Get a copy of the data
+        data = self.getData(identifier) # Get a copy of the data
         data.extend([value]) # Add value to the list.
 
-        path = super(DataManager, self).getFormattedFilename(identifier) # Get the path
+        path = self.getFormattedFilename(identifier) # Get the path
         try:
             with open(path, 'w') as file: # Override the new copy of the data with the new information on the old one.
                 json.dump(data, file, indent=4)
@@ -204,17 +204,17 @@ class DataManager (ABC):
             raise DataManagerErrors.PathNotExists(str(e))
 
     def createDatafile(self, identifier: str):
-        if super(DataManager, self).datafileExists(identifier):  # Check if the datafile already exists
+        if self.datafileExists(identifier):  # Check if the datafile already exists
             raise DataManagerErrors.PathExists()
         else:
-            path = super(DataManager, self).getFormattedFilename(identifier)  # Get the formatted filename
-            if super(DataManager, self).dbtype == super(DataManager, self).DatabaseType.DICT:
+            path = self.getFormattedFilename(identifier)  # Get the formatted filename
+            if self.dbtype == self.DatabaseType.DICT:
                 data = {str(DataFields.IDENTIFIER): identifier} # Add identifier to the data
-                data.update(super(DataManager, self).getDefaultValues())  # Add the default values to the data when creating the datafile.
-            elif super(DataManager, self).dbtype == super(DataManager, self).DatabaseType.LIST:
+                data.update(self.getDefaultValues())  # Add the default values to the data when creating the datafile.
+            elif self.dbtype == self.DatabaseType.LIST:
                 data = [] # Initialise empty list.
             else:
-                raise ValueError(f"Database has an incorrect or invalid type: {str(super(DataManager, self).dbtype)}")
+                raise ValueError(f"Database has an incorrect or invalid type: {str(self.dbtype)}")
             
             with open(path, 'w') as file:
                 json.dump(data, file, indent=4)  # Write the combined data into the file.
@@ -224,9 +224,9 @@ class DataManager (ABC):
         """
             Delete a datafile from the database.
         """
-        path = super(DataManager, self).getFormattedFilename(identifier) # Get path
+        path = self.getFormattedFilename(identifier) # Get path
         
-        if not super(DataManager, self).datafileExists(identifier): # Ensure the path exists before deleting it
+        if not self.datafileExists(identifier): # Ensure the path exists before deleting it
             raise DataManagerErrors.PathNotExists()
         
         try:
@@ -241,18 +241,18 @@ class DataManager (ABC):
             WARNING: THIS DELETES THE ENTIRE DATAPATH FOLDER! Please ensure only data is stored here!
         """
 
-        if not os.path.exists(super(DataManager, self).datapath): # Ensures the datapath exists before deleting it.
+        if not os.path.exists(self.datapath): # Ensures the datapath exists before deleting it.
             raise DataManagerErrors.PathNotExists()
 
         try:
             # Remove all files in the datapath directory
-            for filename in os.listdir(super(DataManager, self).datapath): # Cycle through the contents of a directory
-                file_path = os.path.join(super(DataManager, self).datapath, filename) # Get the filepath of an item of the contents.
+            for filename in os.listdir(self.datapath): # Cycle through the contents of a directory
+                file_path = os.path.join(self.datapath, filename) # Get the filepath of an item of the contents.
                 if os.path.isfile(file_path): # Check if item is a file
                     os.remove(file_path) # If it is a file, remove the file.
                 elif os.path.isdir(file_path): # Check if item is a directory
                     os.rmdir(file_path) # If it's a directory, remove it recursively
 
-            os.rmdir(super(DataManager, self).datapath) # Delete the datapath itself after it's all over.
+            os.rmdir(self.datapath) # Delete the datapath itself after it's all over.
         except Exception as e: # Raise any errors that my arrise.
             raise Exception(f"An error occurred while deleting the entire database: {str(e)}")
