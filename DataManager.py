@@ -44,13 +44,13 @@ class DataManagerErrors:
         def __init__(self, key: str, msg: str = None):
             super().__init__(f"Data key {key} does not exist" + (f": {msg}" if msg else ""))
 
-    class IncorrectDatabaseType(Exception):
+    class ActionNotAllowed(Exception):
         """
             This exception is raised when the program tries to use a function not of a certain database type.
         """
 
-        def _init_(self, type = None, msg: str = None):
-            super().__init__(f"Tried to attempt a type-specific function as a {str(type)}" + (f": {msg}" if msg else ""))
+        def _init_(self, msg: str = None):
+            super().__init__("Action not allowed" + (f": {msg}" if msg else ""))
 
 
 class DataManager (ABC):
@@ -174,7 +174,7 @@ class DataManager (ABC):
         SPECIFIC TO `DatabaseType.DICT`
         """
         if not self.dbtype == self.DatabaseType.DICT: # throw error if the database type is not a dictionary.
-            raise DataManagerErrors.IncorrectDatabaseType(self.dbtype)
+            raise DataManagerErrors.ActionNotAllowed(f"IncorrectDatabaseType: {self.dbtype}")
 
         data = self.getData(identifier) # Get a dictionary of the data
         data[str(field)] = newVal # Set (or create) a key to the new value specified
@@ -191,7 +191,7 @@ class DataManager (ABC):
         SPECIFIC TO `DatabaseType.LIST`
         """
         if not self.dbtype == self.DatabaseType.LIST: # throw error if the database type is not a dictionary.
-            raise DataManagerErrors.IncorrectDatabaseType(self.dbtype)
+            raise DataManagerErrors.ActionNotAllowed(f"IncorrectDatabaseType: {self.dbtype}")
 
         data = self.getData(identifier) # Get a copy of the data
         data.extend([value]) # Add value to the list.
